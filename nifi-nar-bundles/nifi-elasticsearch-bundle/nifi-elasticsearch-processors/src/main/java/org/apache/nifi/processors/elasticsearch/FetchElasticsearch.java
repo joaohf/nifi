@@ -130,6 +130,7 @@ public class FetchElasticsearch extends AbstractElasticsearchTransportClientProc
         descriptors.add(INDEX);
         descriptors.add(TYPE);
         descriptors.add(CHARSET);
+        descriptors.add(ROUTING);
 
         return Collections.unmodifiableList(descriptors);
     }
@@ -152,12 +153,18 @@ public class FetchElasticsearch extends AbstractElasticsearchTransportClientProc
         final String docId = context.getProperty(DOC_ID).evaluateAttributeExpressions(flowFile).getValue();
         final String docType = context.getProperty(TYPE).evaluateAttributeExpressions(flowFile).getValue();
         final Charset charset = Charset.forName(context.getProperty(CHARSET).getValue());
+        final String routing = context.getProperty(ROUTING).evaluateAttributeExpressions(flowFile).getValue();
 
         final ComponentLog logger = getLogger();
         try {
 
             logger.debug("Fetching {}/{}/{} from Elasticsearch", new Object[]{index, docType, docId});
             GetRequestBuilder getRequestBuilder = esClient.get().prepareGet(index, docType, docId);
+
+            if(!routing.isEmpty()) {
+                getRequestBuilder.setRouting(routing);
+            }
+
             if (authToken != null) {
                 getRequestBuilder.putHeader("Authorization", authToken);
             }

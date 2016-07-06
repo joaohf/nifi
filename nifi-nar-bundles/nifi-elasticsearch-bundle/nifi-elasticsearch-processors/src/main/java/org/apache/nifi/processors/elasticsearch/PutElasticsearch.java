@@ -39,6 +39,8 @@ import org.elasticsearch.action.bulk.BulkItemResponse;
 import org.elasticsearch.action.bulk.BulkRequestBuilder;
 import org.elasticsearch.action.bulk.BulkResponse;
 
+import org.elasticsearch.action.index.IndexRequestBuilder;
+import org.elasticsearch.action.update.UpdateRequestBuilder;
 import org.elasticsearch.client.transport.NoNodeAvailableException;
 import org.elasticsearch.node.NodeClosedException;
 import org.elasticsearch.transport.ReceiveTimeoutTransportException;
@@ -145,6 +147,7 @@ public class PutElasticsearch extends AbstractElasticsearchTransportClientProces
         descriptors.add(CHARSET);
         descriptors.add(BATCH_SIZE);
         descriptors.add(INDEX_OP);
+        descriptors.add(ROUTING);
 
         return Collections.unmodifiableList(descriptors);
     }
@@ -178,6 +181,7 @@ public class PutElasticsearch extends AbstractElasticsearchTransportClientProces
                 final String index = context.getProperty(INDEX).evaluateAttributeExpressions(file).getValue();
                 final String docType = context.getProperty(TYPE).evaluateAttributeExpressions(file).getValue();
                 final String indexOp = context.getProperty(INDEX_OP).evaluateAttributeExpressions(file).getValue();
+                final String routing = context.getProperty(ROUTING).evaluateAttributeExpressions(file).getValue();
 
                 final String id = file.getAttribute(id_attribute);
                 if (id == null) {
@@ -192,15 +196,39 @@ public class PutElasticsearch extends AbstractElasticsearchTransportClientProces
                                     .replace("\r\n", " ").replace('\n', ' ').replace('\r', ' ');
 
                             if (indexOp.equalsIgnoreCase("index")) {
-                                bulk.add(esClient.get().prepareIndex(index, docType, id)
-                                        .setSource(json.getBytes(charset)));
+                                IndexRequestBuilder request;
+
+                                request = esClient.get().prepareIndex(index, docType, id)
+                                          .setSource(json.getBytes(charset));
+
+                                if (!routing.isEmpty()) {
+                                    request.setRouting(routing);
+                                }
+
+                                bulk.add(request);
                             } else if (indexOp.equalsIgnoreCase("upsert")) {
-                                bulk.add(esClient.get().prepareUpdate(index, docType, id)
-                                        .setDoc(json.getBytes(charset))
-                                        .setDocAsUpsert(true));
+                                UpdateRequestBuilder request;
+
+                                request = esClient.get().prepareUpdate(index, docType, id)
+                                          .setDoc(json.getBytes(charset))
+                                          .setDocAsUpsert(true);
+
+                                if(!routing.isEmpty()) {
+                                    request.setRouting(routing);
+                                }
+
+                                bulk.add(request);
                             } else if (indexOp.equalsIgnoreCase("update")) {
-                                bulk.add(esClient.get().prepareUpdate(index, docType, id)
-                                        .setDoc(json.getBytes(charset)));
+                                UpdateRequestBuilder request;
+
+                                request = esClient.get().prepareUpdate(index, docType, id)
+                                          .setDoc(json.getBytes(charset));
+
+                                if(!routing.isEmpty()) {
+                                    request.setRouting(routing);
+                                }
+
+                                bulk.add(request);
                             } else {
                                 throw new IOException("Index operation: " + indexOp + " not supported.");
                             }

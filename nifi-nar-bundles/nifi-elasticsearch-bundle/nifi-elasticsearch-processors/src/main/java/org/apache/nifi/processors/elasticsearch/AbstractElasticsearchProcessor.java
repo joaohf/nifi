@@ -19,6 +19,7 @@ package org.apache.nifi.processors.elasticsearch;
 import org.apache.nifi.components.PropertyDescriptor;
 import org.apache.nifi.components.ValidationContext;
 import org.apache.nifi.components.ValidationResult;
+import org.apache.nifi.expression.AttributeExpression;
 import org.apache.nifi.processor.AbstractProcessor;
 import org.apache.nifi.processor.ProcessContext;
 import org.apache.nifi.processor.exception.ProcessException;
@@ -66,6 +67,18 @@ public abstract class AbstractElasticsearchProcessor extends AbstractProcessor {
             .sensitive(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
             .build();
+
+    public static final PropertyDescriptor ROUTING = new PropertyDescriptor.Builder()
+            .name("Routing")
+            .description("Shard placement")
+            .required(false)
+            .sensitive(true)
+            .expressionLanguageSupported(true)
+            .addValidator(StandardValidators.createAttributeExpressionLanguageValidator(
+                    AttributeExpression.ResultType.STRING, true))
+            .defaultValue("")
+            .build();
+
 
     protected abstract void createElasticsearchClient(ProcessContext context) throws ProcessException;
 
