@@ -18,11 +18,7 @@ package org.apache.nifi.snmp.processors;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Vector;
+import java.util.*;
 import java.util.regex.Pattern;
 
 import org.apache.nifi.components.ValidationContext;
@@ -30,6 +26,7 @@ import org.apache.nifi.components.ValidationResult;
 import org.apache.nifi.components.Validator;
 import org.apache.nifi.flowfile.FlowFile;
 import org.apache.nifi.processor.ProcessSession;
+import org.apache.nifi.remote.io.InterruptableInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.snmp4j.PDU;
@@ -42,6 +39,7 @@ import org.snmp4j.security.PrivAES256;
 import org.snmp4j.security.PrivDES;
 import org.snmp4j.security.SecurityLevel;
 import org.snmp4j.smi.OID;
+import org.snmp4j.smi.SMIConstants;
 import org.snmp4j.smi.VariableBinding;
 import org.snmp4j.util.TreeEvent;
 
@@ -190,6 +188,47 @@ abstract class SNMPUtils {
         attributes.put(SNMP_PROP_PREFIX + variableBinding.getOid() + SNMP_PROP_DELIMITER + variableBinding.getVariable().getSyntax(), variableBinding.getVariable().toString());
     }
 
+    public static Map<String, Object> getValueFromAttributes(final Map<String, String> ats) {
+        final Map<String, Object> ovs = new HashMap<>();
+        int len;
+        for (String key : ats.keySet()) {
+            len = key.length();
+
+            // Get snmp Oid variable that the key is SNMP_PROP_PREFIX + Oid + SNMP_PROP_DELIMITIER + Variable
+            // and convert it to the final value
+            if (key.startsWith(SNMP_PROP_PREFIX) && (key.startsWith(SNMP_PROP_DELIMITER, len-2)) ) {
+                char smiSyntaxValue = key.charAt(len - 1);
+
+                switch (Character.getNumericValue(smiSyntaxValue)) {
+                    case SMIConstants.SYNTAX_INTEGER:
+                    case SMIConstants.SYNTAX_GAUGE32:
+                    case SMIConstants.SYNTAX_TIMETICKS:
+                    case SMIConstants.SYNTAX_COUNTER64:
+                        Integer intValue = Integer.valueOf(ats.get(key));
+                        ovs.put("value", intValue);
+                        break;
+                    case SMIConstants.SYNTAX_COUNTER32:
+                        Double doubleValue = Double.valueOf(ats.get(key));
+                        ovs.put("value", doubleValue);
+                        break;
+                    case SMIConstants.SYNTAX_OCTET_STRING:
+                    case SMIConstants.SYNTAX_IPADDRESS:
+                        ovs.put("value_string", ats.get(key));
+                        break;
+                    default:
+                        logger.error("Value From attributes for {}; smi '{}' not builded", new Object[]{key, smiSyntaxValue});
+                        break;
+                }
+
+                //logger.info("Value From attributes for {}; transferring to '{}' smi '{}'", new Object[]{key, ovs, smiSyntaxValue});
+
+            } else {
+                ovs.put(key, ats.get(key));
+            }
+        }
+
+        return ovs;
+    }
     /**
      * Will validate if provided name corresponds to valid SNMP property.
      * @param name the name of the property
