@@ -226,6 +226,23 @@ public class ConvertSNMPToMetric extends AbstractProcessor {
         return session.putAllAttributes(ff, attributesToUpdate);
     }
 
+    private FlowFile buildAttributesListForAttributes(final ProcessSession session,
+                                                  final FlowFile ff,
+                                                  final Map<String, Object> valueList) {
+        Map<String, String> attributesToUpdate = new HashMap<>();
+        final Object f;
+
+        if (valueList.containsKey("value")) {
+            f = valueList.get("value");
+            attributesToUpdate.put("value", f.toString());
+        } else if (valueList.containsKey("value_string")) {
+            f = valueList.get("value_string");
+            attributesToUpdate.put("value", f.toString());
+        }
+
+        return session.putAllAttributes(ff, attributesToUpdate);
+    }
+
     private void buildAttributesListForJson(final Map<String, Object> ffAttributes,
                                             final String regexToDelete,
                                             boolean includeCoreAttributes) {
@@ -307,21 +324,23 @@ public class ConvertSNMPToMetric extends AbstractProcessor {
                     context.getProperty(DELETE_ATTRIBUTES).evaluateAttributeExpressions(ff).getValue(),
                     context.getProperty(INCLUDE_CORE_ATTRIBUTES).asBoolean());
 
-            FlowFile conFlowfile = session.write(ff, new StreamCallback() {
+            final FlowFile nff = buildAttributesListForAttributes(session, ff, valueList);
+
+            FlowFile conFlowfile = session.write(nff, new StreamCallback() {
                 @Override
                 public void process(InputStream in, OutputStream out) throws IOException {
                     try (OutputStream outputStream = new BufferedOutputStream(out)) {
                         outputStream.write(objectMapper.writeValueAsBytes(valueList));
                     } catch (JsonProcessingException e) {
                         getLogger().error(e.getMessage());
-                        session.transfer(ff, REL_FAILURE);
+                        session.transfer(nff, REL_FAILURE);
                     }
                 }
             });
             conFlowfile = session.putAttribute(conFlowfile, CoreAttributes.MIME_TYPE.key(), APPLICATION_JSON);
 
             //logger.info("Updated attributes for {}; transferring to '{}'", new Object[]{ff, REL_SUCCESS.getName()});
-            session.getProvenanceReporter().modifyAttributes(ff);
+            session.getProvenanceReporter().modifyAttributes(nff);
             session.transfer(conFlowfile, REL_SUCCESS);
         }
     }

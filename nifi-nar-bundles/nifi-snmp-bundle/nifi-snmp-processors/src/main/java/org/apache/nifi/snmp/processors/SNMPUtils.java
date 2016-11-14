@@ -190,26 +190,32 @@ abstract class SNMPUtils {
 
     public static Map<String, Object> getValueFromAttributes(final Map<String, String> ats) {
         final Map<String, Object> ovs = new HashMap<>();
+        String smiSyntaxValue;
         int len;
         for (String key : ats.keySet()) {
             len = key.length();
 
             // Get snmp Oid variable that the key is SNMP_PROP_PREFIX + Oid + SNMP_PROP_DELIMITIER + Variable
             // and convert it to the final value
-            if (key.startsWith(SNMP_PROP_PREFIX) && (key.startsWith(SNMP_PROP_DELIMITER, len-2)) ) {
-                char smiSyntaxValue = key.charAt(len - 1);
+            if (key.startsWith(SNMP_PROP_PREFIX) &&
+                    ((key.startsWith(SNMP_PROP_DELIMITER, len-2)) || (key.startsWith(SNMP_PROP_DELIMITER, len-3))) ) {
 
-                switch (Character.getNumericValue(smiSyntaxValue)) {
+                if (key.startsWith(SNMP_PROP_DELIMITER, len-2)) {
+                    smiSyntaxValue = key.substring(len-1);
+                } else if (key.startsWith(SNMP_PROP_DELIMITER, len-3)) {
+                    smiSyntaxValue = key.substring(len-2);
+                } else {
+                    smiSyntaxValue = "0";
+                }
+
+                switch (Integer.parseInt(smiSyntaxValue)) {
                     case SMIConstants.SYNTAX_INTEGER:
+                    case SMIConstants.SYNTAX_COUNTER32:
                     case SMIConstants.SYNTAX_GAUGE32:
                     case SMIConstants.SYNTAX_TIMETICKS:
                     case SMIConstants.SYNTAX_COUNTER64:
                         Integer intValue = Integer.valueOf(ats.get(key));
                         ovs.put("value", intValue);
-                        break;
-                    case SMIConstants.SYNTAX_COUNTER32:
-                        Double doubleValue = Double.valueOf(ats.get(key));
-                        ovs.put("value", doubleValue);
                         break;
                     case SMIConstants.SYNTAX_OCTET_STRING:
                     case SMIConstants.SYNTAX_IPADDRESS:
