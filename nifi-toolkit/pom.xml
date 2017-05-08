@@ -29,6 +29,7 @@
         <module>nifi-toolkit-admin</module>
         <module>nifi-toolkit-zookeeper-migrator</module>
         <module>nifi-toolkit-flowfile-repo</module>
+        <module>nifi-toolkit-template2markup</module>
         <module>nifi-toolkit-assembly</module>
     </modules>
     <dependencyManagement>
