@@ -69,7 +69,7 @@ public abstract class AbstractKudu extends AbstractProcessor {
             .description("The name of the Kudu Table to put data into")
             .required(true)
             .addValidator(StandardValidators.NON_EMPTY_VALIDATOR)
-            .expressionLanguageSupported(ExpressionLanguageScope.VARIABLE_REGISTRY)
+            .expressionLanguageSupported(ExpressionLanguageScope.FLOWFILE_ATTRIBUTES)
             .build();
 
     public static final PropertyDescriptor RECORD_READER = new PropertyDescriptor.Builder()
@@ -133,19 +133,20 @@ public abstract class AbstractKudu extends AbstractProcessor {
     public static final String RECORD_COUNT_ATTR = "record.count";
 
     protected String kuduMasters;
-    protected String tableName;
+    //protected String tableName;
     protected boolean skipHeadLine;
     protected OperationType operationType;
     protected SessionConfiguration.FlushMode flushMode;
     protected int batchSize = 100;
 
     protected KuduClient kuduClient;
-    protected KuduTable kuduTable;
+    //protected KuduTable kuduTable;
+    protected Map<String, KuduTable> kuduTableMap;
 
     @OnScheduled
     public void OnScheduled(final ProcessContext context) {
-        try {
-            tableName = context.getProperty(TABLE_NAME).evaluateAttributeExpressions().getValue();
+//        try {
+            //tableName = context.getProperty(TABLE_NAME).evaluateAttributeExpressions().getValue();
             kuduMasters = context.getProperty(KUDU_MASTERS).evaluateAttributeExpressions().getValue();
             operationType = OperationType.valueOf(context.getProperty(INSERT_OPERATION).getValue());
             batchSize = context.getProperty(BATCH_SIZE).evaluateAttributeExpressions().asInteger();
@@ -155,12 +156,13 @@ public abstract class AbstractKudu extends AbstractProcessor {
             if (kuduClient == null) {
                 getLogger().debug("Setting up Kudu connection...");
                 kuduClient = getKuduConnection(kuduMasters);
-                kuduTable = this.getKuduTable(kuduClient, tableName);
+                //kuduTable = this.getKuduTable(kuduClient, tableName);
+                kuduTableMap = new HashMap<>();
                 getLogger().debug("Kudu connection successfully initialized");
             }
-        } catch(KuduException ex){
-            getLogger().error("Exception occurred while interacting with Kudu due to " + ex.getMessage(), ex);
-        }
+//        } catch(KuduException ex){
+//            getLogger().error("Exception occurred while interacting with Kudu due to " + ex.getMessage(), ex);
+//        }
     }
 
     @OnStopped
@@ -168,6 +170,7 @@ public abstract class AbstractKudu extends AbstractProcessor {
         if (kuduClient != null) {
             getLogger().info("Closing KuduClient");
             kuduClient.close();
+            kuduTableMap.clear();
             kuduClient = null;
         }
     }
@@ -198,13 +201,19 @@ public abstract class AbstractKudu extends AbstractProcessor {
         final Map<FlowFile, Object> flowFileFailures = new HashMap<>();
         final Map<Operation, FlowFile> operationFlowFileMap = new HashMap<>();
 
+        KuduTable kuduTable;
+
         int numBuffered = 0;
         Stream<RowError> pendingRowErrors = Stream.empty();
         for (FlowFile flowFile : flowFiles) {
+            final String tableName = context.getProperty(TABLE_NAME).evaluateAttributeExpressions(flowFile).getValue();
+
             try (final InputStream in = session.read(flowFile);
                 final RecordReader recordReader = recordReaderFactory.createRecordReader(flowFile, in, getLogger())) {
                 final List<String> fieldNames = recordReader.getSchema().getFieldNames();
                 final RecordSet recordSet = recordReader.createRecordSet();
+
+                kuduTable = this.getKuduTable(kuduClient, tableName);
 
                 // Deprecated
                 if (skipHeadLine) recordSet.next();
@@ -281,7 +290,14 @@ public abstract class AbstractKudu extends AbstractProcessor {
     }
 
     protected KuduTable getKuduTable(KuduClient client, String tableName) throws KuduException {
-        return client.openTable(tableName);
+        if (this.kuduTableMap.containsKey(tableName)) {
+            return kuduTableMap.get(tableName);
+        }
+
+        final KuduTable table = client.openTable(tableName);
+        this.kuduTableMap.put(tableName, table);
+
+        return table;
     }
 
     protected KuduSession getKuduSession(KuduClient client){
